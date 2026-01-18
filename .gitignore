@@ -7,7 +7,9 @@ __pycache__/
 *.so
 
 # Data
-/data
+/data/test_images/
+/data/train_images/
+/data/val_images/
 
 # Venv
 .birds_ml_venv/
