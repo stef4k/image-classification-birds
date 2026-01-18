@@ -2,3 +2,6 @@ torch
 numpy
 pandas
 scikit-learn
+ipykernel
+Pillow
+matplotlib
