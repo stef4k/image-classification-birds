@@ -5,12 +5,12 @@ Bird species classifier on Kaggle with clean configs, runs tracking, and report-
 
 ### 1) Create a virtual environment
 ```bash
-python -m venv .venv
+python -m venv .birds_ml_venv
 ```
 
 ### 2) Activate virtual environment
 ```bash
-.venv\Scripts\Activate.ps1
+.birds_ml_venv\Scripts\Activate.ps1
 ```
 
 ### 3) Install dependecies
