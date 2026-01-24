@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+#Outputs
+outputs/
+
 # Data
 /data/test_images/
 /data/train_images/
