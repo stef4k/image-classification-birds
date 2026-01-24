@@ -7,3 +7,4 @@ ipykernel
 Pillow
 matplotlib
 tqdm
+fiftyone
