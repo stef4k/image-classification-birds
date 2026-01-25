@@ -21,10 +21,8 @@ def build_model(cfg: LinearCfg) -> Pipeline:
         steps.append(("clf", LogisticRegression(
             C=cfg.C,
             max_iter=5000,
-            multi_class="multinomial",
             class_weight="balanced",
             solver="saga",
-            n_jobs=-1,
         )))
     return Pipeline(steps)
 
