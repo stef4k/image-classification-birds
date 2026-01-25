@@ -1,6 +1,5 @@
 import argparse
 import json
-from pathlib import Path
 import numpy as np
 from sklearn.model_selection import StratifiedKFold
 
@@ -11,6 +10,7 @@ from birds_ml.features import extract_embeddings
 from birds_ml.model import build_model, save_model, LinearCfg
 from birds_ml.metrics import compute_metrics
 
+
 def main():
     cfg = Config()
     set_seed(cfg.seed)
@@ -20,19 +20,23 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--kind", choices=["svm", "logreg"], default="svm")
     ap.add_argument("--C", type=float, default=1.0)
+    ap.add_argument("--backbone", choices=["resnet50", "efficientnet_b0"], default=cfg.backbone)
     ap.add_argument("--no_cache", action="store_true")
     args = ap.parse_args()
 
+    # override backbone from CLI
+    backbone = args.backbone
+
     train_samples, class_to_idx = load_trainval_from_folders(cfg.train_dir)
 
-    cache_path = cfg.cache_dir / f"emb_{cfg.backbone}_train.npz"
+    cache_path = cfg.cache_dir / f"emb_{backbone}_train.npz"
     if cache_path.exists() and not args.no_cache:
         z = np.load(cache_path, allow_pickle=True)
         X, y = z["X"], z["y"]
         print(f"Loaded cache: {cache_path}  X={X.shape}")
     else:
         X, y, _ = extract_embeddings(
-            train_samples, cfg.backbone, cfg.batch_size, cfg.num_workers, cfg.device
+            train_samples, backbone, cfg.batch_size, cfg.num_workers, cfg.device
         )
         np.savez_compressed(cache_path, X=X, y=y)
         print(f"Saved cache: {cache_path}  X={X.shape}")
@@ -55,22 +59,31 @@ def main():
     final = build_model(LinearCfg(kind=args.kind, C=args.C))
     final.fit(X, y)
 
-    model_path = cfg.outputs_dir / f"{args.kind}_{cfg.backbone}.joblib"
+    model_path = cfg.outputs_dir / f"{args.kind}_{backbone}.joblib"
     save_model(final, str(model_path))
 
     meta = {
         "kind": args.kind,
         "C": args.C,
-        "backbone": cfg.backbone,
+        "backbone": backbone,
         "cv_folds": cfg.cv_folds,
         "cv_avg": avg,
         "cv_std": std,
         "class_to_idx": class_to_idx,
         "idx_to_class": {str(v): k for k, v in class_to_idx.items()},
     }
+
+    # save run-specific meta (doesn't overwrite other runs)
+    meta_run_path = cfg.outputs_dir / f"meta_{args.kind}_{backbone}.json"
+    meta_run_path.write_text(json.dumps(meta, indent=2))
+
+    # also keep a "latest" meta.json for scripts that assume it
     (cfg.outputs_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+
     print(f"\nSaved model: {model_path}")
-    print(f"Saved meta: {cfg.outputs_dir / 'meta.json'}")
+    print(f"Saved meta:  {meta_run_path}")
+    print(f"Updated latest meta: {cfg.outputs_dir / 'meta.json'}")
+
 
 if __name__ == "__main__":
     main()
