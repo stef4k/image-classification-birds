@@ -33,6 +33,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--backbone", default="efficientnet_b0")
     parser.add_argument("--use_crops", action="store_true")
+    parser.add_argument("--augment", action="store_true", help="Load the augmented model version")
     parser.add_argument("--out", default="submission_neural.csv")
     args = parser.parse_args()
     
@@ -40,12 +41,13 @@ def main():
     device = torch.device(cfg.device)
     
     crop_suffix = "_cropped" if cfg.use_crops else ""
-    model_name = f"neural_{args.backbone}{crop_suffix}"
+    aug_suffix = "_aug" if args.augment else ""
+    model_name = f"neural_{args.backbone}{crop_suffix}{aug_suffix}"
     
     # load metadata
     meta_path = cfg.outputs_dir / f"meta_{model_name}.json"
     if not meta_path.exists():
-        raise FileNotFoundError(f"Meta not found: {meta_path}. Run train_neural.py first.")
+        raise FileNotFoundError(f"Meta not found: {meta_path}. Run train_neural.py first with matching flags.")
     
     meta = json.loads(meta_path.read_text())
     idx_to_class = {int(k): v for k, v in meta["idx_to_class"].items()}
@@ -71,6 +73,7 @@ def main():
     head.to(device)
     head.eval()
 
+    # test data
     print(f"Predicting on: {cfg.test_dir}")
     test_samples = load_test_recursive(cfg.test_dir)
     if len(test_samples) == 0:
@@ -78,7 +81,6 @@ def main():
         
     test_samples = sorted(test_samples, key=lambda s: s.path.name.lower())
     
-    # standard inference transform (Resize -> Normalize)
     val_tfm = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
