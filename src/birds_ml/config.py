@@ -7,7 +7,7 @@ class Config:
     data_dir: Path = Path("data")
 
     train_dir: Path = Path("data/train_images")
-    val_dir: Path = Path("data/val_images")
+    val_dir: Path = Path("data/val_") #val_images
     test_dir: Path = Path("data/test_images")
 
     outputs_dir: Path = Path("outputs")
