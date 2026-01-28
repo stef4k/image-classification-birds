@@ -1,0 +1,58 @@
+{
+  "kind": "logreg",
+  "C": 1.0,
+  "backbone": "efficientnet_b0",
+  "cv_folds": 5,
+  "cv_avg": {
+    "accuracy": 0.8798472435569209,
+    "macro_f1": 0.8785969770790473
+  },
+  "cv_std": {
+    "accuracy": 0.017826978103011943,
+    "macro_f1": 0.019513344690894018
+  },
+  "class_to_idx": {
+    "American_Crow": 0,
+    "Black_billed_Cuckoo": 1,
+    "Bobolink": 2,
+    "Brandt_Cormorant": 3,
+    "Brewer_Blackbird": 4,
+    "Bronzed_Cowbird": 5,
+    "Brown_Creeper": 6,
+    "Eastern_Towhee": 7,
+    "Fish_Crow": 8,
+    "Gray_Catbird": 9,
+    "Gray_crowned_Rosy_Finch": 10,
+    "Groove_billed_Ani": 11,
+    "Indigo_Bunting": 12,
+    "Lazuli_Bunting": 13,
+    "Painted_Bunting": 14,
+    "Red_winged_Blackbird": 15,
+    "Rusty_Blackbird": 16,
+    "Yellow_billed_Cuckoo": 17,
+    "Yellow_breasted_Chat": 18,
+    "Yellow_headed_Blackbird": 19
+  },
+  "idx_to_class": {
+    "0": "American_Crow",
+    "1": "Black_billed_Cuckoo",
+    "2": "Bobolink",
+    "3": "Brandt_Cormorant",
+    "4": "Brewer_Blackbird",
+    "5": "Bronzed_Cowbird",
+    "6": "Brown_Creeper",
+    "7": "Eastern_Towhee",
+    "8": "Fish_Crow",
+    "9": "Gray_Catbird",
+    "10": "Gray_crowned_Rosy_Finch",
+    "11": "Groove_billed_Ani",
+    "12": "Indigo_Bunting",
+    "13": "Lazuli_Bunting",
+    "14": "Painted_Bunting",
+    "15": "Red_winged_Blackbird",
+    "16": "Rusty_Blackbird",
+    "17": "Yellow_billed_Cuckoo",
+    "18": "Yellow_breasted_Chat",
+    "19": "Yellow_headed_Blackbird"
+  }
+}
