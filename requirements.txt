@@ -8,3 +8,4 @@ Pillow
 matplotlib
 tqdm
 fiftyone
+wandb
