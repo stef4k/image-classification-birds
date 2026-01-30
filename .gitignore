@@ -15,7 +15,8 @@ outputs/
 /data/val_images/
 /data/train_images_cropped/
 /data/val_images_cropped/
-/data/test_images_cropped/
+/data/val_/
+/data/f_images/
 
 # Venv
 .birds_ml_venv/
