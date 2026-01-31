@@ -15,6 +15,32 @@ from birds_ml.embedder import build_backbone
 from birds_ml.head import CustomHead
 from birds_ml.utils import set_seed, ensure_dir
 
+import torch.nn.functional as F
+from torchvision.transforms import functional as TF
+
+class SquarePad:
+    def __init__(self, target_size):
+        self.target_size = target_size
+
+    def __call__(self, img):
+        # resize so longest edge = target_size
+        w, h = img.size
+        max_wh = max(w, h)
+        scale = self.target_size / max_wh
+        new_w, new_h = int(w * scale), int(h * scale)
+        img = TF.resize(img, (new_h, new_w), interpolation=transforms.InterpolationMode.BICUBIC)
+        
+        # pad to make it square
+        delta_w = self.target_size - new_w
+        delta_h = self.target_size - new_h
+        pad_left = delta_w // 2
+        pad_right = delta_w - pad_left
+        pad_top = delta_h // 2
+        pad_bottom = delta_h - pad_top
+        
+        # fill with gray (128)
+        return TF.pad(img, (pad_left, pad_top, pad_right, pad_bottom), fill=128, padding_mode='constant')
+
 def main():
     cfg = Config()
     ensure_dir(cfg.outputs_dir)
@@ -42,17 +68,23 @@ def main():
     print(f"Training FROZEN TIMM Model | Backbone: {args.backbone}")
     print(f"Using Stats: {model_config['mean']}, {model_config['std']}")
 
-    # transforms
+    # transforms (SquarePad)
     train_tfm = transforms.Compose([
-        transforms.Resize((args.img_size, args.img_size)),
+        # letterbox resize (no squashing, this led to better results)
+        SquarePad(args.img_size),
+        
+        # standard aug
         transforms.RandomHorizontalFlip(),
         transforms.RandomRotation(15),
+        
         transforms.ToTensor(),
         transforms.Normalize(mean=model_config['mean'], std=model_config['std'])
     ])
     
     val_tfm = transforms.Compose([
-        transforms.Resize((args.img_size, args.img_size)),
+        # letterbox resize
+        SquarePad(args.img_size),
+        
         transforms.ToTensor(),
         transforms.Normalize(mean=model_config['mean'], std=model_config['std'])
     ])
@@ -133,7 +165,7 @@ def main():
         avg_loss = train_loss / len(train_dl)
         print(f"Epoch {epoch+1}/{args.epochs} | Loss: {avg_loss:.4f} | Val Acc: {acc:.4f}")
         
-        if acc > best_acc:
+        if acc >= best_acc:
             best_acc = acc
             # save checkpoint (backbone + head + config)
             torch.save({

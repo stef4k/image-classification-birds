@@ -26,6 +26,32 @@ KAGGLE_NAME_TO_IDX = {
     "Bronzed_Cowbird": 19,
 }
 
+import torch.nn.functional as F
+from torchvision.transforms import functional as TF
+
+class SquarePad:
+    def __init__(self, target_size):
+        self.target_size = target_size
+
+    def __call__(self, img):
+        # resize so longest edge = target_size
+        w, h = img.size
+        max_wh = max(w, h)
+        scale = self.target_size / max_wh
+        new_w, new_h = int(w * scale), int(h * scale)
+        img = TF.resize(img, (new_h, new_w), interpolation=transforms.InterpolationMode.BICUBIC)
+        
+        # pad to make it square
+        delta_w = self.target_size - new_w
+        delta_h = self.target_size - new_h
+        pad_left = delta_w // 2
+        pad_right = delta_w - pad_left
+        pad_top = delta_h // 2
+        pad_bottom = delta_h - pad_top
+        
+        # fill with gray (128)
+        return TF.pad(img, (pad_left, pad_top, pad_right, pad_bottom), fill=128, padding_mode='constant')
+
 def main():
     cfg = Config()
     
@@ -77,10 +103,10 @@ def main():
     saved_config = checkpoint.get('config', {'mean': [0.485, 0.456, 0.406], 'std': [0.229, 0.224, 0.225]})
     
     val_tfm = transforms.Compose([
-        transforms.Resize((args.img_size, args.img_size)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=saved_config['mean'], std=saved_config['std'])
-    ])
+            SquarePad(args.img_size),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=saved_config['mean'], std=saved_config['std'])
+        ])
 
     # data
     test_samples = sorted(load_test_recursive(cfg.test_dir), key=lambda s: s.path.name.lower())
