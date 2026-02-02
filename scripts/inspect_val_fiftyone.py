@@ -41,9 +41,11 @@ def main():
     idx_to_class = {int(k): v for k, v in meta["idx_to_class"].items()}
     kind = meta["kind"]
     backbone = meta["backbone"]
+    model_name = meta.get("model_name")
 
     # Load the matching trained model
-    model_name = f"{kind}_{backbone}{crop_suffix}"
+    if not model_name:
+        model_name = f"{kind}_{backbone}{crop_suffix}"
     model_path = cfg.outputs_dir / f"{model_name}.joblib"
     if not model_path.exists():
         raise FileNotFoundError(f"Model not found: {model_path}")
