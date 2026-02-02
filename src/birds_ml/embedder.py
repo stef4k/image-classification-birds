@@ -13,6 +13,25 @@ def build_backbone(name: str):
         )
         # return model and its specific config (mean/std/input_size)
         return m, timm.data.resolve_data_config({}, model=m)
+    
+    if name == "convnextv2_large_384":
+        print(f"Loading TIMM model: convnextv2_large.fcmae_ft_in22k_in1k_384")
+        m = timm.create_model('convnextv2_large.fcmae_ft_in22k_in1k_384', pretrained=True, num_classes=0)
+        return m, timm.data.resolve_data_config({}, model=m)
+    
+    if name == "convnextv2_base_384":
+        print(f"Loading TIMM model: convnextv2_base.fcmae_ft_in22k_in1k_384")
+        m = timm.create_model('convnextv2_base.fcmae_ft_in22k_in1k_384', pretrained=True, num_classes=0)
+        return m, timm.data.resolve_data_config({}, model=m)
+    
+    if name == "vit_so150m2_384":
+        print(f"Loading TIMM model: vit_so150m2_patch16_reg1_gap_384.sbb_e200_in12k_ft_in1k")
+        m = timm.create_model(
+            'vit_so150m2_patch16_reg1_gap_384.sbb_e200_in12k_ft_in1k', 
+            pretrained=True, 
+            num_classes=0
+        )
+        return m, timm.data.resolve_data_config({}, model=m)
 
     if name == "resnet50":
         m = timm.create_model('resnet50.a1_in1k', pretrained=True, num_classes=0)

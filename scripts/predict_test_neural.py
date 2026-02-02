@@ -1,6 +1,7 @@
 import argparse
 import json
 import torch
+import torch.nn as nn
 import pandas as pd
 from pathlib import Path
 from torchvision import transforms
@@ -12,7 +13,7 @@ from birds_ml.config import Config
 from birds_ml.data import load_test_recursive
 from birds_ml.features import SampleDataset
 from birds_ml.embedder import build_backbone
-from birds_ml.head import CustomHead
+# from birds_ml.head import CustomHead
 from birds_ml.utils import ensure_dir
 
 KAGGLE_NAME_TO_IDX = {
@@ -96,7 +97,7 @@ def main():
     
     # head
     input_dim = backbone_model.num_features
-    head = CustomHead(input_dim, 512, len(idx_to_class), dropout_prob=0.0)
+    head = nn.Linear(input_dim, len(idx_to_class)).to(device)
     head.load_state_dict(checkpoint['head'])
     head.to(device).eval()
 

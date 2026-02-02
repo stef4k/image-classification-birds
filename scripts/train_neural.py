@@ -12,7 +12,7 @@ from birds_ml.config import Config
 from birds_ml.data import load_trainval_from_folders, load_val_with_given_mapping
 from birds_ml.features import SampleDataset
 from birds_ml.embedder import build_backbone
-from birds_ml.head import CustomHead
+# from birds_ml.head import CustomHead
 from birds_ml.utils import set_seed, ensure_dir
 
 import torch.nn.functional as F
@@ -110,7 +110,11 @@ def main():
 
     # head
     input_dim = backbone_model.num_features
-    head = CustomHead(input_dim, 512, len(class_to_idx), dropout_prob=0.5).to(device)
+    head = nn.Linear(input_dim, len(class_to_idx)).to(device)
+    
+    # initialize it properly
+    nn.init.constant_(head.bias, 0)
+    nn.init.normal_(head.weight, std=0.01)
     
     optimizer = optim.AdamW(head.parameters(), lr=1e-3, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
