@@ -48,6 +48,8 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 from sklearn.linear_model import LogisticRegression
+from skimage.feature import fisher_vector as sk_fisher_vector
+from skimage.feature import learn_gmm
 import joblib
 
 
@@ -174,53 +176,21 @@ def sample_descriptors(paths: List[Path], cfg: FisherConfig, max_desc: int) -> n
 
 
 def fit_gmm(desc: np.ndarray, n_components: int, random_state: int) -> GaussianMixture:
-    gmm = GaussianMixture(
-        n_components=n_components,
-        covariance_type="diag",
-        max_iter=200,
-        random_state=random_state,
-        reg_covar=1e-6,
-        verbose=0,
-    )
-    gmm.fit(desc)
-    return gmm
+    gm_args = {
+        "max_iter": 200,
+        "random_state": random_state,
+        "reg_covar": 1e-6,
+        "verbose": 0,
+    }
+    return learn_gmm(desc, n_modes=n_components, gm_args=gm_args)
 
 
 def fisher_vector(desc: Optional[np.ndarray], gmm: GaussianMixture) -> np.ndarray:
     k = gmm.n_components
     d = gmm.means_.shape[1]
     if desc is None or len(desc) == 0:
-        return np.zeros((2 * k * d,), dtype=np.float32)
-
-    x = desc.astype(np.float64)
-    n = x.shape[0]
-
-    # Posterior probabilities q_{n,k}
-    q = gmm.predict_proba(x)  # (n, k)
-
-    w = gmm.weights_.reshape(1, k)
-    mu = gmm.means_  # (k, d)
-    sigma = np.sqrt(gmm.covariances_)  # (k, d)
-
-    # Compute sufficient statistics for mean and variance gradients
-    u = np.zeros((k, d), dtype=np.float64)
-    v = np.zeros((k, d), dtype=np.float64)
-
-    for i in range(k):
-        qk = q[:, i].reshape(-1, 1)
-        diff = x - mu[i]
-        u[i] = (qk * (diff / sigma[i])).sum(axis=0)
-        v[i] = (qk * ((diff ** 2) / (sigma[i] ** 2) - 1.0)).sum(axis=0)
-
-    u /= (n * np.sqrt(w).reshape(-1, 1))
-    v /= (n * np.sqrt(2.0 * w).reshape(-1, 1))
-
-    fv = np.concatenate([u, v], axis=0).reshape(-1)
-
-    # Power + L2 normalization
-    eps = 1e-12
-    fv = np.sign(fv) * np.sqrt(np.abs(fv) + eps)
-    fv = fv / (np.linalg.norm(fv) + eps)
+        return np.zeros((2 * k * d + k,), dtype=np.float32)
+    fv = sk_fisher_vector(desc, gmm, improved=True, alpha=0.5)
     return fv.astype(np.float32)
 
 
