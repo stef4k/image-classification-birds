@@ -42,14 +42,13 @@ except Exception as e:
         "OpenCV (cv2) is required for this script. Install with: pip install opencv-python"
     ) from e
 
-# HOG feature extraction (prefer skimage; fallback to OpenCV HOGDescriptor)
-_HOG_BACKEND = None
+# HOG feature extraction (skimage only)
 try:
     from skimage.feature import hog as skimage_hog
-
-    _HOG_BACKEND = "skimage"
-except Exception:
-    _HOG_BACKEND = "opencv"
+except Exception as e:
+    raise RuntimeError(
+        "scikit-image is required for this script. Install with: pip install scikit-image"
+    ) from e
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, f1_score
@@ -139,37 +138,14 @@ def hsv_histogram(img_bgr: np.ndarray, img_size: int, bins: int) -> np.ndarray:
 
 
 def hog_features(gray: np.ndarray, cfg: HogConfig) -> np.ndarray:
-    if _HOG_BACKEND == "skimage":
-        feat = skimage_hog(
-            gray,
-            orientations=cfg.orientations,
-            pixels_per_cell=(cfg.pixels_per_cell, cfg.pixels_per_cell),
-            cells_per_block=(cfg.cells_per_block, cfg.cells_per_block),
-            block_norm=cfg.block_norm,
-            feature_vector=True,
-        ).astype(np.float32)
-        return feat
-
-    # OpenCV fallback: HOGDescriptor expects a window size multiple of block/cell sizes.
-    # We'll approximate with parameters aligned to cfg.
-    win_size = (cfg.img_size, cfg.img_size)
-    cell_size = (cfg.pixels_per_cell, cfg.pixels_per_cell)
-    block_size = (
-        cfg.cells_per_block * cfg.pixels_per_cell,
-        cfg.cells_per_block * cfg.pixels_per_cell,
-    )
-    block_stride = cell_size  # common default
-
-    hog = cv2.HOGDescriptor(
-        _winSize=win_size,
-        _blockSize=block_size,
-        _blockStride=block_stride,
-        _cellSize=cell_size,
-        _nbins=cfg.orientations,
-    )
-    # OpenCV HOG expects 8-bit image
-    gray_u8 = gray if gray.dtype == np.uint8 else np.clip(gray, 0, 255).astype(np.uint8)
-    feat = hog.compute(gray_u8).reshape(-1).astype(np.float32)
+    feat = skimage_hog(
+        gray,
+        orientations=cfg.orientations,
+        pixels_per_cell=(cfg.pixels_per_cell, cfg.pixels_per_cell),
+        cells_per_block=(cfg.cells_per_block, cfg.cells_per_block),
+        block_norm=cfg.block_norm,
+        feature_vector=True,
+    ).astype(np.float32)
     return feat
 
 
@@ -247,7 +223,7 @@ def cmd_train(args: argparse.Namespace) -> None:
 
     # 2) Load paths
     train_paths, y_train = load_labeled_paths(train_dir, mapping)
-    print(f"[train] images={len(train_paths)} classes={len(mapping)} hog_backend={_HOG_BACKEND}")
+    print(f"[train] images={len(train_paths)} classes={len(mapping)} hog_backend=skimage")
 
     # 3) Features
     cache_train = Path(args.cache_train) if args.cache_train else None
