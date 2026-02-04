@@ -172,6 +172,11 @@ def process_folder(model, src_dir: Path, dst_dir: Path, device, gt_bboxes):
 def main():
     cfg = Config()
     
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--src_dir", type=str, default=None, help="Source folder to crop (overrides defaults).")
+    ap.add_argument("--dst_dir", type=str, default=None, help="Destination folder for crops (overrides defaults).")
+    args = ap.parse_args()
+    
     if not torch.cuda.is_available():
         print("WARNING: CUDA not found. This will be slow!")
         device = torch.device("cpu")
@@ -185,6 +190,12 @@ def main():
 
     # detector (as backup)
     detector = load_detector(device)
+
+    if args.src_dir and args.dst_dir:
+        src_dir = Path(args.src_dir)
+        dst_dir = Path(args.dst_dir)
+        process_folder(detector, src_dir, dst_dir, device, gt_bboxes)
+        return
 
     # train
     process_folder(detector, cfg.data_dir / "train_images", cfg.data_dir / "train_images_cropped", device, gt_bboxes)

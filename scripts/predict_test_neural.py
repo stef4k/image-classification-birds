@@ -61,47 +61,80 @@ def main():
     parser.add_argument("--use_crops", action="store_true")
     parser.add_argument("--img_size", type=int, default=224)
     parser.add_argument("--out", default="submission.csv")
+    parser.add_argument("--ckpt_glob", default=None, help="Glob pattern under outputs/ for CV fold checkpoints.")
+    parser.add_argument("--no_tta", action="store_true", help="Disable horizontal-flip TTA.")
     args = parser.parse_args()
     
     cfg = replace(cfg, use_crops=args.use_crops)
-    device = torch.device(cfg.device)
+    device = torch.device(cfg.device if torch.cuda.is_available() else "cpu")
     
     crop_suffix = "_cropped" if cfg.use_crops else ""
-    model_name = f"frozen_timm_{args.backbone}{crop_suffix}_{args.img_size}"
-    
-    meta_path = cfg.outputs_dir / f"meta_{model_name}.json"
-    if not meta_path.exists():
-        fallback_name = f"timm_{args.backbone}{crop_suffix}_{args.img_size}"
-        fallback_path = cfg.outputs_dir / f"meta_{fallback_name}.json"
-        
-        if fallback_path.exists():
-            print(f"Note: Found model under fallback name: {fallback_name}")
-            model_name = fallback_name
-            meta_path = fallback_path
-        else:
-            raise FileNotFoundError(f"Meta not found: {meta_path}. \nDid you train with --backbone {args.backbone} --img_size {args.img_size}?")
-    
+
+    meta_candidates = [
+        cfg.outputs_dir / f"meta_timm_finetune_{args.backbone}{crop_suffix}_{args.img_size}.json",
+        cfg.outputs_dir / f"meta_frozen_timm_{args.backbone}{crop_suffix}_{args.img_size}.json",
+        cfg.outputs_dir / f"meta_timm_{args.backbone}{crop_suffix}_{args.img_size}.json",
+    ]
+    meta_path = next((p for p in meta_candidates if p.exists()), None)
+    if meta_path is None:
+        raise FileNotFoundError(
+            f"Meta not found for backbone={args.backbone} img_size={args.img_size}. "
+            "Expected meta_timm_finetune_*, meta_frozen_timm_*, or meta_timm_*."
+        )
+
     meta = json.loads(meta_path.read_text())
     idx_to_class = {int(k): v for k, v in meta["idx_to_class"].items()}
-    
-    print(f"Loading Model: {model_name}")
+    print(f"Using meta: {meta_path.name}")
 
-    # checkpoint
-    weights_path = cfg.outputs_dir / f"{model_name}.pth"
-    checkpoint = torch.load(weights_path, map_location=device)
-    
-    # backbone
-    backbone_model, _ = build_backbone(args.backbone)
-    backbone_model.load_state_dict(checkpoint['backbone'])
-    backbone_model.to(device).eval()
-    
-    # head
-    input_dim = backbone_model.num_features
-    head = nn.Linear(input_dim, len(idx_to_class)).to(device)
-    head.load_state_dict(checkpoint['head'])
-    head.to(device).eval()
+    def _resolve_checkpoints():
+        if args.ckpt_glob:
+            return sorted(cfg.outputs_dir.glob(args.ckpt_glob))
+        patterns = [
+            f"cv_fold*_timm_finetune_{args.backbone}{crop_suffix}_{args.img_size}.pth",
+            f"cv_fold*_frozen_timm_{args.backbone}{crop_suffix}_{args.img_size}.pth",
+            f"cv_fold*_timm_{args.backbone}{crop_suffix}_{args.img_size}.pth",
+        ]
+        for pattern in patterns:
+            matches = sorted(cfg.outputs_dir.glob(pattern))
+            if matches:
+                return matches
+        single_candidates = [
+            cfg.outputs_dir / f"timm_finetune_{args.backbone}{crop_suffix}_{args.img_size}.pth",
+            cfg.outputs_dir / f"frozen_timm_{args.backbone}{crop_suffix}_{args.img_size}.pth",
+            cfg.outputs_dir / f"timm_{args.backbone}{crop_suffix}_{args.img_size}.pth",
+        ]
+        for p in single_candidates:
+            if p.exists():
+                return [p]
+        return []
 
-    saved_config = checkpoint.get('config', {'mean': [0.485, 0.456, 0.406], 'std': [0.229, 0.224, 0.225]})
+    ckpt_paths = _resolve_checkpoints()
+    if not ckpt_paths:
+        raise FileNotFoundError("No checkpoints found for the given backbone/img_size.")
+
+    print(f"Loading {len(ckpt_paths)} checkpoint(s).")
+
+    models = []
+    saved_config = None
+    for ckpt_path in ckpt_paths:
+        checkpoint = torch.load(ckpt_path, map_location=device)
+        backbone_model, _ = build_backbone(args.backbone)
+        backbone_model.load_state_dict(checkpoint["backbone"])
+        backbone_model.to(device).eval()
+
+        input_dim = backbone_model.num_features
+        head = nn.Linear(input_dim, len(idx_to_class)).to(device)
+        head.load_state_dict(checkpoint["head"])
+        head.to(device).eval()
+
+        if saved_config is None:
+            saved_config = checkpoint.get(
+                "config", {"mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]}
+            )
+        models.append((backbone_model, head))
+
+    if saved_config is None:
+        saved_config = {"mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]}
     
     val_tfm = transforms.Compose([
             SquarePad(args.img_size),
@@ -127,10 +160,29 @@ def main():
     with torch.no_grad():
         for imgs, _, paths in tqdm(dl):
             imgs = imgs.to(device)
-            feats = backbone_model(imgs)
-            logits = head(feats)
-            preds = torch.argmax(logits, dim=1).cpu().numpy()
-            
+            probs_sum = None
+
+            for backbone_model, head in models:
+                with torch.cuda.amp.autocast(enabled=(device.type == "cuda")):
+                    feats = backbone_model(imgs)
+                    logits = head(feats)
+                    probs = torch.softmax(logits, dim=1)
+
+                    if not args.no_tta:
+                        imgs_flip = torch.flip(imgs, dims=[3])
+                        feats_flip = backbone_model(imgs_flip)
+                        logits_flip = head(feats_flip)
+                        probs_flip = torch.softmax(logits_flip, dim=1)
+                        probs = 0.5 * (probs + probs_flip)
+
+                if probs_sum is None:
+                    probs_sum = probs
+                else:
+                    probs_sum += probs
+
+            probs_avg = probs_sum / len(models)
+            preds = torch.argmax(probs_avg, dim=1).cpu().numpy()
+
             all_preds.extend(preds)
             all_files.extend([Path(p).name for p in paths])
 
