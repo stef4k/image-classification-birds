@@ -32,6 +32,16 @@ def build_backbone(name: str):
             num_classes=0
         )
         return m, timm.data.resolve_data_config({}, model=m)
+    
+    if name == "eva02_large_448":
+        print(f"Loading TIMM model: eva02_large_patch14_448.mim_m38m_ft_in22k_in1k")
+        m = timm.create_model('eva02_large_patch14_448.mim_m38m_ft_in22k_in1k', pretrained=True, num_classes=0)
+        return m, timm.data.resolve_data_config({}, model=m)
+    
+    if name == "caformer_b36_384":
+        print(f"Loading TIMM model: caformer_b36.sail_in22k_ft_in1k_384")
+        m = timm.create_model('caformer_b36.sail_in22k_ft_in1k_384', pretrained=True, num_classes=0)
+        return m, timm.data.resolve_data_config({}, model=m)
 
     if name == "resnet50":
         m = timm.create_model('resnet50.a1_in1k', pretrained=True, num_classes=0)

@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import torch
 import torch.nn as nn
 import pandas as pd
@@ -8,12 +9,13 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from dataclasses import replace
 from tqdm import tqdm
+import torch.nn.functional as F
+from torchvision.transforms import functional as TF
 
 from birds_ml.config import Config
 from birds_ml.data import load_test_recursive
 from birds_ml.features import SampleDataset
 from birds_ml.embedder import build_backbone
-# from birds_ml.head import CustomHead
 from birds_ml.utils import ensure_dir
 
 KAGGLE_NAME_TO_IDX = {
@@ -27,8 +29,15 @@ KAGGLE_NAME_TO_IDX = {
     "Bronzed_Cowbird": 19,
 }
 
-import torch.nn.functional as F
-from torchvision.transforms import functional as TF
+class ArcMarginProduct(nn.Module):
+    def __init__(self, in_features, out_features, s=30.0, m=0.50):
+        super(ArcMarginProduct, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.s = s
+        self.m = m
+        self.weight = nn.Parameter(torch.FloatTensor(out_features, in_features))
+        # No init needed here as we load from state_dict
 
 class SquarePad:
     def __init__(self, target_size):
@@ -45,13 +54,7 @@ class SquarePad:
         # pad to make it square
         delta_w = self.target_size - new_w
         delta_h = self.target_size - new_h
-        pad_left = delta_w // 2
-        pad_right = delta_w - pad_left
-        pad_top = delta_h // 2
-        pad_bottom = delta_h - pad_top
-        
-        # fill with gray (128)
-        return TF.pad(img, (pad_left, pad_top, pad_right, pad_bottom), fill=128, padding_mode='constant')
+        return TF.pad(img, (delta_w//2, delta_h//2, delta_w-(delta_w//2), delta_h-(delta_h//2)), fill=128, padding_mode='constant')
 
 def main():
     cfg = Config()
@@ -61,33 +64,27 @@ def main():
     parser.add_argument("--use_crops", action="store_true")
     parser.add_argument("--img_size", type=int, default=224)
     parser.add_argument("--out", default="submission.csv")
+    parser.add_argument("--use_arcface", action="store_true", help="Use ArcFace head logic")
     args = parser.parse_args()
     
     cfg = replace(cfg, use_crops=args.use_crops)
     device = torch.device(cfg.device)
     
     crop_suffix = "_cropped" if cfg.use_crops else ""
-    model_name = f"frozen_timm_{args.backbone}{crop_suffix}_{args.img_size}"
+    head_prefix = "arcface" if args.use_arcface else "linear"
     
+    model_name = f"{head_prefix}_{args.backbone}{crop_suffix}_{args.img_size}"
+    print(f"--> Looking for specific model: {model_name}")
     meta_path = cfg.outputs_dir / f"meta_{model_name}.json"
-    if not meta_path.exists():
-        fallback_name = f"timm_{args.backbone}{crop_suffix}_{args.img_size}"
-        fallback_path = cfg.outputs_dir / f"meta_{fallback_name}.json"
-        
-        if fallback_path.exists():
-            print(f"Note: Found model under fallback name: {fallback_name}")
-            model_name = fallback_name
-            meta_path = fallback_path
-        else:
-            raise FileNotFoundError(f"Meta not found: {meta_path}. \nDid you train with --backbone {args.backbone} --img_size {args.img_size}?")
+    weights_path = cfg.outputs_dir / f"{model_name}.pth"
     
+    if not meta_path.exists():
+        raise FileNotFoundError(f"Meta file not found: {meta_path}\nDid you train with --use_arcface={args.use_arcface}?")
+    if not weights_path.exists():
+        raise FileNotFoundError(f"Weights file not found: {weights_path}")
+
     meta = json.loads(meta_path.read_text())
     idx_to_class = {int(k): v for k, v in meta["idx_to_class"].items()}
-    
-    print(f"Loading Model: {model_name}")
-
-    # checkpoint
-    weights_path = cfg.outputs_dir / f"{model_name}.pth"
     checkpoint = torch.load(weights_path, map_location=device)
     
     # backbone
@@ -97,7 +94,12 @@ def main():
     
     # head
     input_dim = backbone_model.num_features
-    head = nn.Linear(input_dim, len(idx_to_class)).to(device)
+    
+    if args.use_arcface:
+        head = ArcMarginProduct(input_dim, len(idx_to_class), s=30.0, m=0.50).to(device)
+    else:
+        head = nn.Linear(input_dim, len(idx_to_class)).to(device)
+        
     head.load_state_dict(checkpoint['head'])
     head.to(device).eval()
 
@@ -127,9 +129,26 @@ def main():
     with torch.no_grad():
         for imgs, _, paths in tqdm(dl):
             imgs = imgs.to(device)
-            feats = backbone_model(imgs)
-            logits = head(feats)
-            preds = torch.argmax(logits, dim=1).cpu().numpy()
+            
+            feats1 = backbone_model(imgs)
+            if args.use_arcface:
+                norm_feats1 = F.normalize(feats1)
+                norm_weights = F.normalize(head.weight)
+                logits1 = F.linear(norm_feats1, norm_weights) * head.s
+            else:
+                logits1 = head(feats1)
+            
+            imgs_flip = torch.flip(imgs, [3])
+            feats2 = backbone_model(imgs_flip)
+            if args.use_arcface:
+                norm_feats2 = F.normalize(feats2)
+                logits2 = F.linear(norm_feats2, norm_weights) * head.s
+            else:
+                logits2 = head(feats2)
+            
+            # average
+            avg_logits = (logits1 + logits2) / 2.0
+            preds = torch.argmax(avg_logits, dim=1).cpu().numpy()
             
             all_preds.extend(preds)
             all_files.extend([Path(p).name for p in paths])

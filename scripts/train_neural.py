@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -14,6 +15,7 @@ from birds_ml.features import SampleDataset
 from birds_ml.embedder import build_backbone
 # from birds_ml.head import CustomHead
 from birds_ml.utils import set_seed, ensure_dir
+from birds_ml.arcface_margin import ArcMarginProduct
 
 import torch.nn.functional as F
 from torchvision.transforms import functional as TF
@@ -50,6 +52,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=25)
     parser.add_argument("--img_size", type=int, default=224)
     parser.add_argument("--use_crops", action="store_true")
+    parser.add_argument("--use_arcface", action="store_true", help="Use ArcFace head instead of Linear")
     args = parser.parse_args()
     
     cfg = replace(cfg, use_crops=args.use_crops)
@@ -65,8 +68,8 @@ def main():
     for param in backbone_model.parameters():
         param.requires_grad = False
 
-    print(f"Training FROZEN TIMM Model | Backbone: {args.backbone}")
-    print(f"Using Stats: {model_config['mean']}, {model_config['std']}")
+    head_type = "ArcFace" if args.use_arcface else "Linear"
+    print(f"Training {head_type} | Backbone: {args.backbone}")
 
     # transforms (SquarePad)
     train_tfm = transforms.Compose([
@@ -93,29 +96,21 @@ def main():
     train_samples, class_to_idx = load_trainval_from_folders(cfg.train_dir)
     val_samples = load_val_with_given_mapping(cfg.val_dir, class_to_idx)
     
-    train_dl = DataLoader(
-        SampleDataset(train_samples, train_tfm), 
-        batch_size=32, 
-        shuffle=True, 
-        num_workers=0, # fixed for Windows, ran into issues with multiprocessing
-        pin_memory=True
-    )
-    val_dl = DataLoader(
-        SampleDataset(val_samples, val_tfm), 
-        batch_size=32, 
-        shuffle=False, 
-        num_workers=0,
-        pin_memory=True
-    )
+    train_dl = DataLoader(SampleDataset(train_samples, train_tfm), batch_size=32, shuffle=True, num_workers=0, pin_memory=True)
+    val_dl = DataLoader(SampleDataset(val_samples, val_tfm), batch_size=32, shuffle=False, num_workers=0, pin_memory=True)
 
     # head
     input_dim = backbone_model.num_features
-    head = nn.Linear(input_dim, len(class_to_idx)).to(device)
     
-    # initialize it properly
-    nn.init.constant_(head.bias, 0)
-    nn.init.normal_(head.weight, std=0.01)
-    
+    if args.use_arcface:
+        # SOTA ArcFace Head
+        head = ArcMarginProduct(input_dim, len(class_to_idx), s=30.0, m=0.50).to(device)
+    else:
+        # standard Linear Head
+        head = nn.Linear(input_dim, len(class_to_idx)).to(device)
+        nn.init.constant_(head.bias, 0)
+        nn.init.normal_(head.weight, std=0.01)
+
     optimizer = optim.AdamW(head.parameters(), lr=1e-3, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
@@ -123,7 +118,9 @@ def main():
 
     best_acc = 0.0
     crop_suffix = "_cropped" if cfg.use_crops else ""
-    model_name = f"frozen_timm_{args.backbone}{crop_suffix}_{args.img_size}"
+    # Distinguish model names so they don't overwrite each other
+    head_prefix = "arcface" if args.use_arcface else "linear"
+    model_name = f"{head_prefix}_{args.backbone}{crop_suffix}_{args.img_size}"
     
     for epoch in range(args.epochs):
         head.train()
@@ -138,7 +135,13 @@ def main():
                 with torch.no_grad():
                     feats = backbone_model(imgs)
                 
-                preds = head(feats)
+                if args.use_arcface:
+                    # ArcFace needs labels to compute margin
+                    preds = head(feats, labels)
+                else:
+                    # linear just maps features to logits
+                    preds = head(feats)
+                
                 loss = criterion(preds, labels)
             
             scaler.scale(loss).backward()
@@ -159,9 +162,18 @@ def main():
                 
                 with autocast():
                     feats = backbone_model(imgs)
-                    preds = head(feats)
                     
-                _, predicted = torch.max(preds.data, 1)
+                    # inference
+                    if args.use_arcface:
+                        # Cosine Similarity (No Margin)
+                        norm_feats = F.normalize(feats)
+                        norm_weights = F.normalize(head.weight)
+                        logits = F.linear(norm_feats, norm_weights) * head.s
+                    else:
+                        # Standard Linear Forward
+                        logits = head(feats)
+                    
+                _, predicted = torch.max(logits.data, 1)
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
         
@@ -178,16 +190,16 @@ def main():
                 'config': model_config
             }, cfg.outputs_dir / f"{model_name}.pth")
 
-    # meta for prediction
-    meta = {
-        "kind": "timm_frozen",
-        "backbone": args.backbone,
-        "img_size": args.img_size,
-        "class_to_idx": class_to_idx,
-        "idx_to_class": {str(v): k for k, v in class_to_idx.items()},
-        "best_acc": best_acc
-    }
-    (cfg.outputs_dir / f"meta_{model_name}.json").write_text(json.dumps(meta, indent=2))
+            # meta
+            meta = {
+                "kind": "arcface_frozen" if args.use_arcface else "timm_frozen",
+                "backbone": args.backbone,
+                "img_size": args.img_size,
+                "class_to_idx": class_to_idx,
+                "idx_to_class": {str(v): k for k, v in class_to_idx.items()},
+                "best_acc": best_acc
+            }
+            (cfg.outputs_dir / f"meta_{model_name}.json").write_text(json.dumps(meta, indent=2))
     
     print(f"Finished. Best Val Acc: {best_acc:.4f}")
     print(f"Saved Metadata: meta_{model_name}.json")
