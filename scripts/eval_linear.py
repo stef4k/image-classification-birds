@@ -1,6 +1,7 @@
 import argparse
 import json
 import numpy as np
+from dataclasses import replace
 
 from birds_ml.config import Config
 from birds_ml.data import load_val_with_given_mapping
@@ -16,11 +17,16 @@ def main():
     ap.add_argument("--kind", choices=["svm", "logreg"], default=None)
     ap.add_argument("--backbone", choices=["resnet50", "efficientnet_b0"], default=None)
     ap.add_argument("--no_cache", action="store_true")
+    ap.add_argument("--use_crops", action="store_true", help="Use cropped datasets")
     args = ap.parse_args()
+    cfg = replace(cfg, use_crops=args.use_crops)
+
+    crop_suffix = "_cropped" if cfg.use_crops else ""
 
     # Choose meta file: specific run if provided, else latest
     if args.kind and args.backbone:
-        meta_path = cfg.outputs_dir / f"meta_{args.kind}_{args.backbone}.json"
+        meta_filename = f"meta_{args.kind}_{args.backbone}{crop_suffix}.json"
+        meta_path = cfg.outputs_dir / meta_filename
     else:
         meta_path = cfg.outputs_dir / "meta.json"
 
@@ -32,7 +38,8 @@ def main():
     backbone = meta["backbone"]
     kind = meta["kind"]
 
-    model_path = cfg.outputs_dir / f"{kind}_{backbone}.joblib"
+    model_name = f"{kind}_{backbone}{crop_suffix}"
+    model_path = cfg.outputs_dir / f"{model_name}.joblib"
     if not model_path.exists():
         raise FileNotFoundError(f"Model not found: {model_path}")
 
@@ -40,7 +47,7 @@ def main():
 
     val_samples = load_val_with_given_mapping(cfg.val_dir, class_to_idx)
 
-    cache_path = cfg.cache_dir / f"emb_{backbone}_val.npz"
+    cache_path = cfg.cache_dir / f"emb_{backbone}_val{crop_suffix}.npz"
     if cache_path.exists() and not args.no_cache:
         z = np.load(cache_path, allow_pickle=True)
         Xv, yv = z["X"], z["y"]

@@ -2,6 +2,7 @@ import argparse
 import json
 import numpy as np
 from sklearn.model_selection import StratifiedKFold
+from dataclasses import replace
 
 from birds_ml.config import Config
 from birds_ml.utils import set_seed, ensure_dir
@@ -22,14 +23,21 @@ def main():
     ap.add_argument("--C", type=float, default=1.0)
     ap.add_argument("--backbone", choices=["resnet50", "efficientnet_b0"], default=cfg.backbone)
     ap.add_argument("--no_cache", action="store_true")
+    ap.add_argument("--use_crops", action="store_true", help="Use cropped datasets")
     args = ap.parse_args()
+    cfg = replace(cfg, use_crops=args.use_crops)
+
+    print(f"Config: use_crops={cfg.use_crops}")
+    print(f"Training Data: {cfg.train_dir}")
 
     # override backbone from CLI
     backbone = args.backbone
 
     train_samples, class_to_idx = load_trainval_from_folders(cfg.train_dir)
 
-    cache_path = cfg.cache_dir / f"emb_{backbone}_train.npz"
+    crop_suffix = "_cropped" if cfg.use_crops else ""
+    cache_path = cfg.cache_dir / f"emb_{backbone}_train{crop_suffix}.npz"
+
     if cache_path.exists() and not args.no_cache:
         z = np.load(cache_path, allow_pickle=True)
         X, y = z["X"], z["y"]
@@ -59,7 +67,8 @@ def main():
     final = build_model(LinearCfg(kind=args.kind, C=args.C))
     final.fit(X, y)
 
-    model_path = cfg.outputs_dir / f"{args.kind}_{backbone}.joblib"
+    model_name = f"{args.kind}_{backbone}{crop_suffix}"
+    model_path = cfg.outputs_dir / f"{model_name}.joblib"
     save_model(final, str(model_path))
 
     meta = {
@@ -74,7 +83,7 @@ def main():
     }
 
     # save run-specific meta (doesn't overwrite other runs)
-    meta_run_path = cfg.outputs_dir / f"meta_{args.kind}_{backbone}.json"
+    meta_run_path = cfg.outputs_dir / f"meta_{args.kind}_{backbone}{crop_suffix}.json"
     meta_run_path.write_text(json.dumps(meta, indent=2))
 
     # also keep a "latest" meta.json for scripts that assume it

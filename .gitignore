@@ -13,6 +13,10 @@ outputs/
 /data/test_images/
 /data/train_images/
 /data/val_images/
+/data/train_images_cropped/
+/data/val_images_cropped/
+/data/val_/
+/data/f_images/
 /data/*
 
 # Venv
