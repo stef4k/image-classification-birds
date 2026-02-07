@@ -61,6 +61,12 @@ def main():
     parser.add_argument("--use_crops", action="store_true")
     parser.add_argument("--img_size", type=int, default=224)
     parser.add_argument("--out", default="submission.csv")
+    parser.add_argument("--test_dir", default=None, help="Optional test directory override (e.g. data/extra_images).")
+    parser.add_argument(
+        "--out_with_conf",
+        default=None,
+        help="Optional detailed CSV with predicted label and confidence per image.",
+    )
     parser.add_argument("--ckpt_glob", default=None, help="Glob pattern under outputs/ for CV fold checkpoints.")
     parser.add_argument("--no_tta", action="store_true", help="Disable horizontal-flip TTA.")
     args = parser.parse_args()
@@ -143,7 +149,9 @@ def main():
         ])
 
     # data
-    test_samples = sorted(load_test_recursive(cfg.test_dir), key=lambda s: s.path.name.lower())
+    test_dir = Path(args.test_dir) if args.test_dir else cfg.test_dir
+    test_samples = sorted(load_test_recursive(test_dir), key=lambda s: s.path.name.lower())
+    test_dir_abs = test_dir.resolve()
     
     dl = DataLoader(
         SampleDataset(test_samples, val_tfm), 
@@ -153,9 +161,11 @@ def main():
     )
 
     all_preds = []
+    all_conf = []
     all_files = []
+    all_relpaths = []
     
-    print(f"Running Inference on {len(test_samples)} images...")
+    print(f"Running Inference on {len(test_samples)} images from: {test_dir}")
     
     with torch.no_grad():
         for imgs, _, paths in tqdm(dl):
@@ -181,10 +191,20 @@ def main():
                     probs_sum += probs
 
             probs_avg = probs_sum / len(models)
-            preds = torch.argmax(probs_avg, dim=1).cpu().numpy()
+            conf, preds = torch.max(probs_avg, dim=1)
+            preds = preds.cpu().numpy()
+            conf = conf.cpu().numpy()
 
             all_preds.extend(preds)
-            all_files.extend([Path(p).name for p in paths])
+            all_conf.extend(conf.tolist())
+            batch_paths = [Path(p) for p in paths]
+            all_files.extend([p.name for p in batch_paths])
+            for p in batch_paths:
+                try:
+                    rel = p.resolve().relative_to(test_dir_abs)
+                    all_relpaths.append(str(rel))
+                except Exception:
+                    all_relpaths.append(p.name)
 
     kaggle_ids = []
     for p in all_preds:
@@ -198,6 +218,30 @@ def main():
     df = pd.DataFrame({"path": all_files, "class_idx": kaggle_ids})
     df.to_csv(cfg.outputs_dir / args.out, index=False)
     print(f"Saved {args.out}")
+
+    detailed_rows = []
+    for fname, relpath, pred_idx, conf_val, kaggle_idx in zip(
+        all_files, all_relpaths, all_preds, all_conf, kaggle_ids
+    ):
+        class_name = idx_to_class[int(pred_idx)]
+        detailed_rows.append(
+            {
+                "path": fname,
+                "relative_path": relpath,
+                "predicted_label": class_name,
+                "predicted_idx_internal": int(pred_idx),
+                "class_idx": int(kaggle_idx),
+                "confidence": float(conf_val),
+            }
+        )
+
+    detailed_out = args.out_with_conf
+    if detailed_out is None:
+        out_stem = Path(args.out).stem
+        detailed_out = f"{out_stem}_with_conf.csv"
+    detailed_path = cfg.outputs_dir / detailed_out
+    pd.DataFrame(detailed_rows).to_csv(detailed_path, index=False)
+    print(f"Saved {detailed_path.name}")
 
 if __name__ == "__main__":
     main()
