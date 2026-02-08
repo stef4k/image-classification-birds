@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 from tqdm import tqdm
+import timm
 
 from .data import Sample
 from .embedder import build_backbone
@@ -31,8 +32,9 @@ def extract_embeddings(
     num_workers: int,
     device: str,
 ) -> Tuple[np.ndarray, Optional[np.ndarray], List[str]]:
-    model, transform = build_backbone(backbone)
+    model, data_config = build_backbone(backbone)
     model.eval()
+    transform = timm.data.create_transform(**data_config, is_training=False)
 
     dev = torch.device(device if torch.cuda.is_available() and device.startswith("cuda") else "cpu")
     model.to(dev)
