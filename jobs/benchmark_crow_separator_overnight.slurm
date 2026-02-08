@@ -24,7 +24,7 @@ srun python scripts/benchmark_crow_separator_overnight.py \
   --batch_size 16 \
   --profile_mode pseudo_only \
   --pseudo_profile_name pseudo_all \
-  --pseudo_profile_weight 1 \
+  --pseudo_profile_weight 0.5 \
   --pseudo_profile_min_conf 0.0 \
   --pseudo_ignore_conf_filter \
   --pseudo_dir data/pseudo_labels \
