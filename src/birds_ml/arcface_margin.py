@@ -19,16 +19,15 @@ class ArcMarginProduct(nn.Module):
         self.mm = math.sin(math.pi - m) * m
 
     def forward(self, input, label):
-        # Normalize features and weights (Cosine Similarity)
-        # This removes the "Magnitude" variable that broke AdaFace
+        # normalize features and weights (Cosine Similarity)
         cosine = F.linear(F.normalize(input), F.normalize(self.weight))
         
-        # Calculate Margin
+        # margin
         sine = torch.sqrt((1.0 - torch.pow(cosine, 2)).clamp(0, 1))
         phi = cosine * self.cos_m - sine * self.sin_m
         phi = torch.where(cosine > self.th, phi, cosine - self.mm)
         
-        # Apply Margin only to the correct class
+        # apply margin
         one_hot = torch.zeros(cosine.size(), device=input.device)
         one_hot.scatter_(1, label.view(-1, 1).long(), 1)
         
