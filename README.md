@@ -71,3 +71,56 @@ Force recompute embeddings:
 python scripts/inspect_val_fiftyone.py --kind logreg --backbone efficientnet_b0 --no_cache
 ```
 
+## Reproducing Best Results
+
+To reproduce the top-performing models described in the report, use the `scripts/train_neural.py` script.
+
+### 1. The Best Model: ViT-384 (Linear Head)
+This model achieved **90.0%** on the Private Test Set. It uses a standard linear head and is trained for 30 epochs.
+
+**Train:**
+```bash
+python scripts/train_neural.py \
+    --backbone vit_so150m2_384 \
+    --img_size 384 \
+    --epochs 30 \
+    --use_crops
+```
+
+Outputs: `outputs/linear_vit_so150m2_384_cropped_384.pth`
+
+**Predict:**
+
+```bash
+python scripts/predict_test_neural.py \
+    --backbone vit_so150m2_384 \
+    --img_size 384 \
+    --use_crops \
+    --out submission_linear_vit_so150m2_384.csv
+```
+
+### 2. The Selected Model: EVA-02 Large (ArcFace)
+This model achieved **93.0%** on the Public Leaderboard. It uses the ArcFace margin loss for tighter class clustering and high-resolution input (448px).
+
+**Train:**
+```bash
+python scripts/train_neural.py \
+    --backbone eva02_large_448 \
+    --img_size 448 \
+    --epochs 50 \
+    --use_arcface \
+    --use_crops
+```
+
+Outputs: `outputs/arcface_eva02_large_448_cropped_448.pth`
+
+**Predict:**
+
+```bash
+python scripts/predict_test_neural.py \
+    --backbone eva02_large_448 \
+    --img_size 448 \
+    --use_arcface \
+    --use_crops \
+    --out submission_arcface_eva02_large_448.csv
+```
