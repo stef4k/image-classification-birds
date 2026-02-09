@@ -13,14 +13,15 @@ outputs/
 /data/test_images/
 /data/train_images/
 /data/val_images/
-/data/.*
-/data/test_images_cropped/
-/data/val_images_cropped/
 /data/train_images_cropped/
+/data/val_images_cropped/
+/data/val_/
+/data/f_images/
+/data/f_images_cropped/
 /data/extra_images/
-data/f_images_cropped/
-data/f_images_cropped/
-data/pseudo_labels/
+/data/pseudo_labels/
+/data/test_images_cropped/
+
 # Venv
 .birds_ml_venv/
 
