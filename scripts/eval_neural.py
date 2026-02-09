@@ -18,7 +18,6 @@ from birds_ml.data import load_val_with_given_mapping
 from birds_ml.features import SampleDataset
 from birds_ml.embedder import build_backbone
 
-# --- ArcFace Class (Needed for loading weights) ---
 class ArcMarginProduct(nn.Module):
     def __init__(self, in_features, out_features, s=30.0, m=0.50):
         super(ArcMarginProduct, self).__init__()
@@ -59,7 +58,6 @@ def main():
     ap.add_argument("--use_crops", action="store_true")
     ap.add_argument("--batch_size", type=int, default=32)
     ap.add_argument("--num_workers", type=int, default=0)
-    # Optional: explicitly provide a model name/path if auto-detect fails
     ap.add_argument("model_name_override", nargs="?", default=None, help="Optional: Specific model name to load (e.g. arcface_final_...)")
     ap.add_argument("--no_tta", action="store_true", help="Disable horizontal-flip TTA.")
     args = ap.parse_args()
@@ -68,7 +66,6 @@ def main():
 
     crop_suffix = "_cropped" if args.use_crops else ""
     
-    # 1. Resolve Meta Path
     # We look for ArcFace first, then Linear, then Legacy
     arcface_name = f"arcface_final_{args.backbone}{crop_suffix}_{args.img_size}"
     linear_name = f"linear_{args.backbone}{crop_suffix}_{args.img_size}"
@@ -109,7 +106,6 @@ def main():
     is_arcface = "arcface" in meta.get("kind", "")
     print(f"Architecture: {'ArcFace' if is_arcface else 'Linear'}")
 
-    # 2. Resolve Checkpoint Path
     # The meta file usually corresponds to a .pth file of the same name (minus 'meta_')
     # e.g., meta_arcface_final_...json -> arcface_final_...pth
     model_name = meta_path.stem.replace("meta_", "")
@@ -118,7 +114,7 @@ def main():
     if not ckpt_path.exists():
         raise FileNotFoundError(f"Checkpoint not found at: {ckpt_path}")
 
-    # 3. Load Model
+    # model
     print(f"Loading Weights: {ckpt_path.name}")
     checkpoint = torch.load(ckpt_path, map_location=device)
     
@@ -140,7 +136,7 @@ def main():
         "config", {"mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]}
     )
 
-    # 4. Prepare Data
+    # data
     val_tfm = transforms.Compose([
         SquarePad(args.img_size),
         transforms.ToTensor(),
@@ -159,7 +155,7 @@ def main():
         num_workers=args.num_workers,
     )
 
-    # 5. Inference Loop
+    # inference + evaluation
     y_true = []
     y_pred = []
     
@@ -168,11 +164,9 @@ def main():
     with torch.no_grad():
         for imgs, labels, _ in dl:
             imgs = imgs.to(device)
-            labels = labels.to(device) # Keep labels for tracking, not used in forward
-
-            # --- Evaluation Logic (Matches Predictor) ---
+            labels = labels.to(device) # keep labels for tracking, not used in forward
             
-            # 1. Normal Image
+            # image
             feats1 = backbone_model(imgs)
             if is_arcface:
                 norm_feats1 = F.normalize(feats1)
@@ -183,7 +177,7 @@ def main():
             
             final_probs = torch.softmax(logits1, dim=1)
 
-            # 2. TTA (Flip)
+            # TTA
             if not args.no_tta:
                 imgs_flip = torch.flip(imgs, dims=[3])
                 feats2 = backbone_model(imgs_flip)
