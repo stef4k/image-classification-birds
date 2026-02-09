@@ -17,7 +17,9 @@ outputs/
 /data/val_images_cropped/
 /data/val_/
 /data/f_images/
-/data/*
+/data/f_images_cropped/
+/data/extra_images/
+/data/pseudo_labels/
 
 # Venv
 .birds_ml_venv/
