@@ -18,7 +18,9 @@ outputs/
 /data/val_/
 /data/f_images/
 /data/test_images_cropped/mistery_cat/
-/data/*
+/data/extra_images/
+data/pseudo_labels/
+data/f_images_cropped/
 
 # Venv
 .birds_ml_venv/
