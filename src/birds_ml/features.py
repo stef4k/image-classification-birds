@@ -23,6 +23,25 @@ class SampleDataset(Dataset):
         y = -1 if s.label is None else int(s.label)
         return x, y, str(s.path)
 
+def _ensure_transform_callable(transform):
+    if callable(transform):
+        return transform
+
+    # `build_backbone()` returns a TIMM data config dict; convert it into an
+    # actual preprocessing pipeline
+    if isinstance(transform, dict):
+        from timm.data import create_transform
+
+        cfg = dict(transform)
+        cfg["is_training"] = False
+        # TIMM's config uses (C, H, W); `create_transform` accepts this
+        return create_transform(**cfg)
+
+    raise TypeError(
+        "Expected a callable transform or a TIMM data-config dict; "
+        f"got {type(transform)!r}"
+    )
+
 @torch.inference_mode()
 def extract_embeddings(
     samples: List[Sample],
@@ -32,6 +51,7 @@ def extract_embeddings(
     device: str,
 ) -> Tuple[np.ndarray, Optional[np.ndarray], List[str]]:
     model, transform = build_backbone(backbone)
+    transform = _ensure_transform_callable(transform)
     model.eval()
 
     dev = torch.device(device if torch.cuda.is_available() and device.startswith("cuda") else "cpu")

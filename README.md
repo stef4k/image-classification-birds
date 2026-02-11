@@ -66,8 +66,9 @@ Launches the FiftyOne app with
 ```bash
 python scripts/inspect_val_fiftyone.py --kind logreg --backbone efficientnet_b0
 ```
+Note: this script uses a project-local FiftyOne database under `outputs/fiftyone_db` to avoid Windows file-lock issues with the default global DB.
+By default it will use cropped validation images if `data/val_images_cropped` exists (override with `--no-use-crops`).
 Force recompute embeddings:
 ```bash
 python scripts/inspect_val_fiftyone.py --kind logreg --backbone efficientnet_b0 --no_cache
 ```
-
