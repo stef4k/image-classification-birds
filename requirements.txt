@@ -3,9 +3,13 @@ torchvision
 numpy
 pandas
 scikit-learn
+opencv-python
+scikit-image
 ipykernel
 Pillow
 matplotlib
 tqdm
 fiftyone
+wandb
+scikit-image
 timm

@@ -20,6 +20,7 @@ __pycache__/
 /data/f_images_cropped/
 /data/extra_images/
 /data/pseudo_labels/
+/data/test_images_cropped/
 
 # Venv
 .birds_ml_venv/
