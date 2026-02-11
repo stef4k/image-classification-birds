@@ -72,8 +72,6 @@ Force recompute embeddings:
 ```bash
 python scripts/inspect_val_fiftyone.py --kind logreg --backbone efficientnet_b0 --no_cache
 ```
-<<<<<<< HEAD
-=======
 
 ## Reproducing Best Results
 
@@ -128,4 +126,3 @@ python scripts/predict_test_neural.py \
     --use_crops \
     --out submission_arcface_eva02_large_448.csv
 ```
->>>>>>> 6e9ede0ea9e69afd346977724557a697b349d860
