@@ -1,6 +1,7 @@
 import torch.nn as nn
 import timm
 
+# more about the backbones at: https://github.com/huggingface/pytorch-image-models/tree/main/results
 def build_backbone(name: str):
     # when using "convnext_base", we use the larger 22k version
     if name == "convnext_base":

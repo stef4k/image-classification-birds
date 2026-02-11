@@ -4,7 +4,6 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 from tqdm import tqdm
-from torchvision import transforms
 
 from .data import Sample
 from .embedder import build_backbone
@@ -24,36 +23,24 @@ class SampleDataset(Dataset):
         y = -1 if s.label is None else int(s.label)
         return x, y, str(s.path)
 
-def build_embedding_transforms(
-    img_size: int = 224,
-    resize_train: int = 256,
-    crop_scale_min: float = 0.7,
-    crop_scale_max: float = 1.0,
-    rotation_deg: float = 30.0,
-    hflip_p: float = 0.5,
-):
-    mean = [0.485, 0.456, 0.406]
-    std = [0.229, 0.224, 0.225]
+def _ensure_transform_callable(transform):
+    if callable(transform):
+        return transform
 
-    standard = transforms.Compose([
-        transforms.Resize((img_size, img_size)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean, std),
-    ])
+    # `build_backbone()` returns a TIMM data config dict; convert it into an
+    # actual preprocessing pipeline
+    if isinstance(transform, dict):
+        from timm.data import create_transform
 
-    augment = transforms.Compose([
-        transforms.Resize((resize_train, resize_train)),
-        transforms.RandomResizedCrop(
-            img_size,
-            scale=(crop_scale_min, crop_scale_max),
-        ),
-        transforms.RandomHorizontalFlip(p=hflip_p),
-        transforms.RandomRotation(rotation_deg),
-        transforms.ToTensor(),
-        transforms.Normalize(mean, std),
-    ])
+        cfg = dict(transform)
+        cfg["is_training"] = False
+        # TIMM's config uses (C, H, W); `create_transform` accepts this
+        return create_transform(**cfg)
 
-    return standard, augment
+    raise TypeError(
+        "Expected a callable transform or a TIMM data-config dict; "
+        f"got {type(transform)!r}"
+    )
 
 @torch.inference_mode()
 def extract_embeddings(
@@ -62,13 +49,10 @@ def extract_embeddings(
     batch_size: int,
     num_workers: int,
     device: str,
-    transform=None,
 ) -> Tuple[np.ndarray, Optional[np.ndarray], List[str]]:
-    model, default_transform = build_backbone(backbone)
+    model, transform = build_backbone(backbone)
+    transform = _ensure_transform_callable(transform)
     model.eval()
-
-    if transform is None:
-        transform = default_transform
 
     dev = torch.device(device if torch.cuda.is_available() and device.startswith("cuda") else "cpu")
     model.to(dev)

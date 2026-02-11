@@ -1,5 +1,7 @@
 import torch.nn as nn
 
+# this is a custom head that we tried out
+# it is not used in the final version as it did not improve performance (see report)
 class CustomHead(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_classes, dropout_prob=0.5):
         super().__init__()
@@ -9,7 +11,7 @@ class CustomHead(nn.Module):
             nn.BatchNorm1d(hidden_dim),
             # (GELU matches ConvNeXt internals)
             nn.GELU(),
-            # Dynamic Dropout
+            # dynamic dropout
             nn.Dropout(dropout_prob),
             nn.Linear(hidden_dim, num_classes)
         )

@@ -7,7 +7,7 @@ __pycache__/
 *.so
 
 #Outputs
-outputs/
+/outputs/*
 
 # Data
 /data/test_images/
