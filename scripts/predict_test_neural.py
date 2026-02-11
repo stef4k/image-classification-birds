@@ -37,7 +37,7 @@ class ArcMarginProduct(nn.Module):
         self.s = s
         self.m = m
         self.weight = nn.Parameter(torch.FloatTensor(out_features, in_features))
-        # No init needed here as we load from state_dict
+        # no init needed here as we load from state_dict
 
 class SquarePad:
     def __init__(self, target_size):

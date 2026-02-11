@@ -95,7 +95,8 @@ def main():
     # data
     train_samples, class_to_idx = load_trainval_from_folders(cfg.train_dir)
     val_samples = load_val_with_given_mapping(cfg.val_dir, class_to_idx)
-    
+
+    # with batch_size=32 it runs on a RTX 3050 6GB Laptop GPU just fine even with 448x448
     train_dl = DataLoader(SampleDataset(train_samples, train_tfm), batch_size=32, shuffle=True, num_workers=0, pin_memory=True)
     val_dl = DataLoader(SampleDataset(val_samples, val_tfm), batch_size=32, shuffle=False, num_workers=0, pin_memory=True)
 
