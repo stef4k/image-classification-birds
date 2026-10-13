@@ -1,5 +1,34 @@
 # Image-classification-birds
-Bird species classifier on Kaggle with clean configs, runs tracking, and report-ready experiments
+
+Course project for the Machine Learning course at CentraleSupélec, carried out by Kristóf Balázs and Stefanos Kypritidis as part of a class Kaggle competition.
+ 
+## Overview
+ 
+The task is to classify 20 bird species from a subset of the Caltech-UCSD Birds-200-2011 (CUB) dataset, scored by top-1 accuracy on a hidden 400-image test set. It is a fine-grained problem: several classes differ only in small details such as beak shape or plumage texture, and some pairs (American Crow vs. Fish Crow, Brewer's vs. Rusty Blackbird) are hard to tell apart even for experienced birders. We had only 1,082 labelled training images (51–58 per class) and a 103-image validation split, and no external labels were allowed. Because the validation split is small and unevenly distributed across classes, we selected models mainly with stratified 5-fold cross-validation.
+ 
+We benchmarked a wide range of methods, from hand-crafted features (HOG with logistic regression, dense-SIFT Fisher Vectors with a linear SVM) to pretrained `timm` backbones used as frozen feature extractors: ResNet-50, EfficientNet-B0, ConvNeXt / ConvNeXt V2, CAFormer, ViT-SO150M and EVA-02 Large. On top of the frozen features we compared linear, MLP and ArcFace heads. To stop the models from relying on the background, we cropped every image around the bird (ground-truth boxes for train/val, a Faster R-CNN detector for the test images, with a few detector failures re-cropped by hand), padded images instead of stretching them to keep the aspect ratio, and moved to higher input resolutions (384–448 px). Hyperparameter sweeps were tracked in Weights & Biases, and we used FiftyOne to inspect validation errors class by class.
+ 
+Pretrained representations clearly dominated: the best classical pipeline reached 38.4% cross-validation accuracy, while a frozen EfficientNet-B0 with logistic regression already reached 89.4%. The most consistent gains came from the data side (cropping, aspect-ratio-preserving padding, higher resolution) rather than from more complex heads. Error analysis showed that the remaining mistakes concentrated on a few near-identical species pairs, mostly the two crows. We tried several targeted fixes: pseudo-labelling 439 extra images from NABirds, a hierarchical mixture of experts, a soft-voting ensemble, partial unfreezing of the backbone, and a dedicated binary crow separator. None of them gave a reliable improvement on held-out data. The crow separator, for example, reached 95% on our crow validation images but only 75% on an external set of 180 crow images, and left the overall test accuracy unchanged.
+ 
+The main lesson came from the final leaderboard. Our submitted model, EVA-02 Large with an ArcFace head at 448 px, scored 93.0% on the public leaderboard but dropped to 85.5% on the private one, a sign that our model choice had been tuned to the public split. A much simpler frozen ViT-384 with a single linear layer scored 90.0% on both, and trains in about 10 minutes on a 6 GB laptop GPU. With this little data, added model complexity and aggressive margin losses reduced robustness, and gains measured on small validation splits need to be read with caution.
+ 
+## Report and presentation
+ 
+- [Final report (PDF)](docs/final_report.pdf)
+- [Final presentation (PDF)](docs/final_presentation.pdf)
+
+## Results at a glance
+ 
+| Approach | Accuracy |
+|---|---|
+| HOG + logistic regression | 22% (5-fold CV) |
+| Fisher Vectors + linear SVM | 38.4% (5-fold CV) |
+| EfficientNet-B0 embeddings + logistic regression | 77% (private test) |
+| EVA-02 Large + ArcFace head, 448 px (submitted) | 93.0% public / 85.5% private |
+| ViT-384 + linear head (best) | 90.0% public / 90.0% private |
+ 
+**Stack:** PyTorch, timm, scikit-learn, torchvision (Faster R-CNN), Weights & Biases, FiftyOne
+
 
 ## Setup
 
